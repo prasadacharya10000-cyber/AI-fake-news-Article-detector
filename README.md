@@ -1,103 +1,57 @@
 # TruthLens — AI Fake News Detector
-### Beautiful Web UI · Flask Backend · LSTM · BERT · RoBERTa
 
----
-
-## Quick Start (3 steps)
-
-### 1. Install dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Train the models
-```bash
-# Fast (2 min) — synthetic data, LSTM only — good for testing
-python train.py --model lstm
-
-# Full (recommended) — real Kaggle data, all 3 models
-python train.py --real
-
-# Individual models on real data
-python train.py --real --model lstm
-python train.py --real --model bert
-python train.py --real --model roberta
-```
-> **Note:** `data/Fake.csv` and `data/True.csv` are already included.
-
-### 3. Start the server
-```bash
-python server.py
-```
-Your browser will open automatically at **http://localhost:5000** 🎉
-
----
-
-## Project Structure
-```
-truthlens/
-├── server.py           ← Flask backend (START HERE)
-├── train.py            ← Training pipeline
-├── index.html          ← Beautiful frontend (served by Flask)
-├── requirements.txt
-│
-├── models/
-│   ├── lstm_model.py   ← BiLSTM with attention
-│   └── bert_model.py   ← BERT + RoBERTa fine-tuning
-│
-├── data/
-│   ├── prepare_data.py ← Data loading & cleaning (FIXED)
-│   ├── Fake.csv        ← Kaggle fake news dataset
-│   └── True.csv        ← Kaggle real news dataset
-│
-├── utils/
-│   └── evaluate.py     ← Metrics, confusion matrix, plots
-│
-└── saved_models/       ← Created after training
-    ├── lstm_weights.pt
-    ├── vocab.pkl
-    ├── bert/
-    └── roberta/
-```
-
----
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/` | GET | Serves the frontend |
-| `/api/status` | GET | Backend health + which models are trained |
-| `/api/analyze` | POST | Run inference |
-
-### Example API call
-```python
-import requests
-r = requests.post('http://localhost:5000/api/analyze', json={
-    'text': 'Scientists SHOCKED by secret government plan...',
-    'model': 'LSTM'   # or 'BERT' or 'RoBERTa'
-})
-print(r.json())
-# {'label': 'FAKE', 'confidence': 0.92, 'fake_prob': 0.92, 'real_prob': 0.08, 'ms': 12}
-```
-
----
-
-## Bug Fixes (vs original)
-
-| Issue | Fix |
-|---|---|
-| Dateline stripping too aggressive | Conservative regex, only strips known wire-service patterns |
-| LSTM trained on punctuation-stripped text but inference didn't strip | `clean_text_lstm()` applied at both train and inference time |
-| Transformer got lowercase/stripped text | `clean_text()` preserves case and punctuation for BERT/RoBERTa tokenisers |
-| Both models used same `clean_text` | Separate `combined_lstm` and `combined_transformer` columns in DataFrame |
-
----
+A web application that detects fake news using three ML models — BiLSTM, BERT, and RoBERTa — with a Flask backend and a clean browser UI.
 
 ## Models
 
-| Model | Accuracy | Speed | Params |
-|---|---|---|---|
-| BiLSTM | ~92% | ⚡ Fast | ~5M |
-| BERT | ~97% | ⚙️ Medium | 110M |
-| RoBERTa | ~98% | 🐢 Slower | 125M |
+| Model | Accuracy | Speed |
+|-------|----------|-------|
+| BiLSTM | ~92% | Fast |
+| BERT | ~97% | Medium |
+| RoBERTa | ~98% | Slower |
+
+## Features
+- Three selectable ML models for inference
+- Separate NLP preprocessing pipelines for LSTM vs transformer models
+- Confidence scores and probability breakdown for each prediction
+- REST API for programmatic access
+- Auto-opens in browser on server start
+
+## Tech Stack
+Python · Flask · PyTorch · Transformers (HuggingFace) · scikit-learn · NLTK
+
+## Getting Started
+
+### Installation
+```bash
+git clone https://github.com/prasadacharya10000-cyber/AI-fake-news-Article-detector.git
+cd AI-fake-news-Article-detector
+pip install -r requirements.txt
+```
+
+### Train Models
+```bash
+# Fast test (synthetic data, LSTM only)
+python train.py --model lstm
+
+# Full training on real Kaggle data (recommended)
+python train.py --real
+```
+> Note: `data/Fake.csv` and `data/True.csv` are included in the repo.
+
+### Run
+```bash
+python server.py
+```
+Opens automatically at http://localhost:5000
+
+## API
+```python
+import requests
+r = requests.post('http://localhost:5000/api/analyze', json={
+    'text': 'Your news article text here...',
+    'model': 'LSTM'  # or 'BERT' or 'RoBERTa'
+})
+print(r.json())
+# {'label': 'FAKE', 'confidence': 0.92, 'fake_prob': 0.92, 'real_prob': 0.08}
+```
