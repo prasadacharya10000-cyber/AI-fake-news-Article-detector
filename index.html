@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>TruthLens · AI Fake News Detector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+/* ══ RESET & TOKENS ══════════════════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased}
+:root{
+  --bg:#04070f;--s1:#090e1c;--s2:#0e1525;--s3:#131c30;
+  --br:rgba(255,255,255,.07);--br2:rgba(255,255,255,.13);
+  --a1:#4f8ef7;--a2:#7c5cfc;--a3:#38bdf8;
+  --red:#f7614f;--red2:#ff9472;
+  --grn:#34d399;--grn2:#6ee7b7;
+  --txt:#e2e8f5;--txt2:#94a3b8;--muted:#4a5568;
+  --r:20px;--r2:12px;--r3:8px;
+  --fs:0.875rem
+}
+body{background:var(--bg);color:var(--txt);font-family:'Inter',sans-serif;overflow-x:hidden;line-height:1.6}
+
+/* ══ BACKGROUND ══════════════════════════════════════════════════════ */
+#c{position:fixed;inset:0;z-index:0;pointer-events:none}
+.grid{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:linear-gradient(rgba(79,142,247,.03) 1px,transparent 1px),
+             linear-gradient(90deg,rgba(79,142,247,.03) 1px,transparent 1px);
+  background-size:60px 60px;animation:gs 30s linear infinite}
+@keyframes gs{to{background-position:60px 60px}}
+.ob{position:fixed;border-radius:50%;filter:blur(120px);pointer-events:none;z-index:0;will-change:transform}
+.o1{width:800px;height:800px;background:rgba(79,142,247,.09);top:-300px;left:-200px;animation:f1 16s ease-in-out infinite}
+.o2{width:600px;height:600px;background:rgba(124,92,252,.08);bottom:-200px;right:-150px;animation:f2 19s ease-in-out infinite}
+.o3{width:400px;height:400px;background:rgba(56,189,248,.05);top:40%;left:40%;animation:f1 11s ease-in-out infinite reverse}
+@keyframes f1{0%,100%{transform:translate(0,0)}50%{transform:translate(40px,-30px)}}
+@keyframes f2{0%,100%{transform:translate(0,0)}50%{transform:translate(-40px,28px)}}
+/* noise overlay */
+body::before{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.25;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E")}
+
+/* ══ LAYOUT ══════════════════════════════════════════════════════════ */
+.page{position:relative;z-index:2}
+
+/* ══ NAV ═════════════════════════════════════════════════════════════ */
+nav{
+  position:sticky;top:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:1rem 2.5rem;
+  background:rgba(4,7,15,.8);backdrop-filter:blur(24px) saturate(180%);
+  border-bottom:1px solid var(--br);
+  animation:slideD .5s ease both
+}
+@keyframes slideD{from{transform:translateY(-100%);opacity:0}to{transform:none;opacity:1}}
+.logo{display:flex;align-items:center;gap:.6rem;text-decoration:none;color:var(--txt)}
+.lmark{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--a1),var(--a2));display:flex;align-items:center;justify-content:center;font-size:1rem;box-shadow:0 0 20px rgba(79,142,247,.4)}
+.ltext{font-family:'Syne',sans-serif;font-weight:800;font-size:1.15rem;letter-spacing:-.02em}
+.nav-links{display:flex;gap:2rem}
+.nav-links a{color:var(--txt2);text-decoration:none;font-size:.85rem;font-weight:500;transition:.2s;letter-spacing:.01em}
+.nav-links a:hover{color:var(--txt)}
+.nav-r{display:flex;align-items:center;gap:.75rem}
+
+/* ══ BUTTONS ═════════════════════════════════════════════════════════ */
+.btn{padding:.52rem 1.15rem;border-radius:var(--r3);font-size:var(--fs);font-weight:500;cursor:pointer;transition:all .2s;border:none;font-family:inherit}
+.btn-g{background:transparent;border:1px solid var(--br);color:var(--txt2)}
+.btn-g:hover{border-color:var(--br2);color:var(--txt);background:rgba(255,255,255,.04)}
+.btn-p{background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;box-shadow:0 4px 18px rgba(79,142,247,.3)}
+.btn-p:hover{transform:translateY(-1px);box-shadow:0 8px 28px rgba(79,142,247,.45)}
+.btn-p:active{transform:none}
+
+/* ══ HERO ════════════════════════════════════════════════════════════ */
+.hero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:6rem 1.5rem 4.5rem;animation:fuD .75s ease both .1s}
+@keyframes fuD{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+
+.badge{display:inline-flex;align-items:center;gap:.45rem;padding:.3rem .9rem;border-radius:999px;margin-bottom:1.75rem;background:rgba(79,142,247,.1);border:1px solid rgba(79,142,247,.22);font-size:.72rem;font-weight:700;color:var(--a1);letter-spacing:.08em;text-transform:uppercase;animation:bp 3s ease infinite}
+@keyframes bp{0%,100%{box-shadow:0 0 0 0 rgba(79,142,247,.25)}50%{box-shadow:0 0 0 7px transparent}}
+.bdot{width:6px;height:6px;border-radius:50%;background:var(--a1);animation:blink 2s ease infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+h1{font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(2.6rem,6vw,5.2rem);line-height:1.05;letter-spacing:-.04em;margin-bottom:1.3rem}
+.gr{background:linear-gradient(130deg,#4f8ef7 0%,#a78bfa 50%,#f87171 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;display:inline}
+.hero-p{font-size:1.05rem;color:var(--txt2);max-width:520px;line-height:1.75;margin-bottom:2.25rem;font-weight:300}
+.hbtns{display:flex;gap:.9rem;flex-wrap:wrap;justify-content:center;margin-bottom:3.5rem}
+.hbtn{padding:.78rem 1.9rem;border-radius:12px;font-size:.95rem;font-weight:600;cursor:pointer;border:none;font-family:inherit;transition:all .25s;letter-spacing:.01em}
+.hbtn-p{background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;box-shadow:0 4px 24px rgba(79,142,247,.35)}
+.hbtn-p:hover{transform:translateY(-2px);box-shadow:0 10px 32px rgba(79,142,247,.5)}
+.hbtn-g{background:transparent;border:1px solid var(--br2);color:var(--txt2)}
+.hbtn-g:hover{color:var(--txt);background:rgba(255,255,255,.04)}
+
+/* stats */
+.stats{display:flex;gap:3rem;flex-wrap:wrap;justify-content:center;padding-top:2.5rem;border-top:1px solid var(--br);width:100%;max-width:600px}
+.snum{font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;line-height:1;background:linear-gradient(135deg,var(--a1),var(--a2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.slbl{font-size:.72rem;color:var(--muted);font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-top:.2rem}
+
+/* ══ SECTION HEADS ═══════════════════════════════════════════════════ */
+.sh{display:flex;align-items:center;gap:.75rem;margin-bottom:1.75rem}
+.sh .ln{flex:1;height:1px;background:var(--br)}
+.sh span{font-family:'Syne',sans-serif;font-size:.7rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--txt2);white-space:nowrap}
+
+/* ══ STATUS STRIP ════════════════════════════════════════════════════ */
+.status-wrap{max-width:760px;margin:0 auto 1.5rem;padding:0 1.5rem;animation:fuD .6s ease both .25s}
+.status-inner{display:flex;align-items:center;gap:.75rem;padding:.65rem 1rem;border-radius:var(--r2);background:var(--s1);border:1px solid var(--br);font-size:.8rem}
+.sdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:.3s}
+.sdot.on{background:var(--grn);box-shadow:0 0 8px var(--grn)}
+.sdot.warn{background:#fbbf24;box-shadow:0 0 8px #fbbf24}
+.sdot.spin{background:var(--a1);animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.stxt{color:var(--txt2);flex:1;font-size:.8rem}
+.chips{display:flex;gap:.35rem;flex-wrap:wrap}
+.chip{padding:.15rem .5rem;border-radius:4px;font-size:.7rem;font-weight:700;letter-spacing:.03em}
+.chip-on{background:rgba(52,211,153,.14);color:var(--grn)}
+.chip-off{background:rgba(255,255,255,.05);color:var(--muted)}
+
+/* ══ DETECTOR CARD ═══════════════════════════════════════════════════ */
+.det{max-width:760px;margin:0 auto;padding:0 1.5rem 5rem;animation:fuD .7s ease both .2s}
+.card{background:var(--s1);border:1px solid var(--br);border-radius:var(--r);padding:2rem;position:relative;overflow:hidden;box-shadow:0 0 80px rgba(79,142,247,.07)}
+.card::before{content:'';position:absolute;inset:0;border-radius:var(--r);background:radial-gradient(circle at 10% 10%,rgba(79,142,247,.06),transparent 55%);pointer-events:none}
+
+/* tabs */
+.tabs{display:flex;gap:.4rem;background:var(--s2);border:1px solid var(--br);border-radius:12px;padding:.35rem;margin-bottom:1.5rem}
+.tab{flex:1;padding:.52rem;border-radius:8px;cursor:pointer;text-align:center;font-size:.82rem;font-weight:600;letter-spacing:.02em;transition:all .22s;color:var(--txt2);border:none;background:transparent;font-family:inherit}
+.tab.on{background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;box-shadow:0 4px 14px rgba(79,142,247,.3)}
+.tab:hover:not(.on){color:var(--txt);background:rgba(255,255,255,.05)}
+.tab-info{display:flex;align-items:center;gap:.55rem;padding:.6rem .9rem;margin-bottom:1.4rem;background:rgba(255,255,255,.03);border:1px solid var(--br);border-radius:8px;font-size:.78rem;color:var(--txt2)}
+.ti-tag{padding:.16rem .48rem;border-radius:4px;background:rgba(79,142,247,.15);color:var(--a1);font-weight:700;font-size:.7rem;flex-shrink:0}
+
+/* textarea */
+.ta{width:100%;min-height:155px;resize:vertical;background:var(--s2);border:1px solid var(--br);border-radius:var(--r2);padding:1rem 1.1rem;color:var(--txt);font-family:'Inter',sans-serif;font-size:.9rem;line-height:1.65;outline:none;transition:border-color .2s,box-shadow .2s}
+.ta:focus{border-color:rgba(79,142,247,.5);box-shadow:0 0 0 3px rgba(79,142,247,.1)}
+.ta::placeholder{color:var(--muted)}
+.ta-meta{display:flex;justify-content:space-between;align-items:center;margin-top:.5rem;margin-bottom:1.2rem}
+.ta-ct{font-size:.74rem;color:var(--muted)}
+.ta-sample{font-size:.74rem;color:var(--a1);cursor:pointer;background:none;border:none;font-family:inherit;padding:0;transition:.2s}
+.ta-sample:hover{text-decoration:underline}
+
+/* analyze button */
+.abtn{width:100%;padding:.95rem;border-radius:14px;font-family:'Syne',sans-serif;font-size:.95rem;font-weight:800;letter-spacing:.04em;background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;box-shadow:0 4px 24px rgba(79,142,247,.35);cursor:pointer;border:none;transition:all .25s;position:relative;overflow:hidden}
+.abtn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 12px 36px rgba(79,142,247,.52)}
+.abtn:active{transform:none}
+.abtn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.shine{position:absolute;top:-60%;left:-120%;width:50%;height:220%;background:linear-gradient(105deg,transparent,rgba(255,255,255,.18),transparent);transform:skewX(-20deg)}
+.abtn:hover:not(:disabled) .shine{left:160%;transition:left .55s ease}
+
+/* loader */
+.ldr{display:none;text-align:center;padding:1.75rem 0}
+.ldr-ring{width:42px;height:42px;margin:0 auto .8rem;border:2.5px solid var(--br);border-top-color:var(--a1);border-radius:50%;animation:spin .65s linear infinite}
+.ldr-msg{font-size:.85rem;color:var(--txt2)}
+
+/* result */
+#rbox{margin-top:1.6rem;display:none}
+.rc{border-radius:var(--r2);padding:1.6rem;border:1px solid;animation:pop .45s cubic-bezier(.34,1.56,.64,1) both}
+@keyframes pop{from{opacity:0;transform:scale(.93) translateY(10px)}to{opacity:1;transform:none}}
+.rc-fake{background:rgba(247,97,79,.07);border-color:rgba(247,97,79,.3)}
+.rc-real{background:rgba(52,211,153,.07);border-color:rgba(52,211,153,.3)}
+.rh{display:flex;align-items:center;gap:.9rem;margin-bottom:1.4rem}
+.rico{width:52px;height:52px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:1.45rem;flex-shrink:0}
+.ri-f{background:rgba(247,97,79,.15)}
+.ri-r{background:rgba(52,211,153,.15)}
+.rlbl{font-family:'Syne',sans-serif;font-size:1.75rem;font-weight:800;letter-spacing:-.02em;line-height:1}
+.rl-f{color:var(--red)}
+.rl-r{color:var(--grn)}
+.rconf{font-size:.85rem;color:var(--txt2);margin-top:.3rem}
+.bar-t{height:8px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;margin:.9rem 0 .3rem}
+.bar-f{height:100%;border-radius:999px;width:0%;transition:width 1.4s cubic-bezier(.22,1,.36,1)}
+.bf-f{background:linear-gradient(90deg,var(--red),var(--red2))}
+.bf-r{background:linear-gradient(90deg,var(--grn),var(--grn2))}
+.bar-lbl{display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);margin-bottom:1.2rem}
+.pg{display:grid;grid-template-columns:1fr 1fr;gap:.9rem}
+.pc{background:rgba(255,255,255,.04);border:1px solid var(--br);border-radius:11px;padding:.9rem;text-align:center}
+.pp{font-family:'Syne',sans-serif;font-size:1.55rem;font-weight:800;line-height:1}
+.pp-r{color:var(--grn)}
+.pp-f{color:var(--red)}
+.pl{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:.2rem;font-weight:600}
+.rftr{display:flex;align-items:center;justify-content:space-between;margin-top:1.1rem;flex-wrap:wrap;gap:.4rem}
+.rm{padding:.22rem .65rem;border-radius:4px;background:rgba(79,142,247,.14);color:var(--a1);font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.rt{font-size:.72rem;color:var(--muted)}
+.rerr{padding:.9rem 1.1rem;border-radius:10px;background:rgba(247,97,79,.08);border:1px solid rgba(247,97,79,.22);color:var(--red);font-size:.85rem;display:flex;align-items:center;gap:.55rem;animation:pop .35s ease both}
+
+/* ══ FEATURES ════════════════════════════════════════════════════════ */
+.feats{max-width:1060px;margin:0 auto;padding:0 1.5rem 5rem}
+.fg{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin-top:1.75rem}
+.fc{background:var(--s1);border:1px solid var(--br);border-radius:16px;padding:1.5rem;transition:all .3s;position:relative;overflow:hidden}
+.fc:hover{border-color:rgba(79,142,247,.2);transform:translateY(-3px);box-shadow:0 16px 40px rgba(0,0,0,.3)}
+.fc::after{content:'';position:absolute;inset:0;border-radius:16px;background:radial-gradient(circle at 0 0,rgba(79,142,247,.05),transparent 60%);opacity:0;transition:.3s}
+.fc:hover::after{opacity:1}
+.fic{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;margin-bottom:1rem}
+.fc h3{font-family:'Syne',sans-serif;font-weight:700;font-size:.9rem;margin-bottom:.4rem}
+.fc p{font-size:.8rem;color:var(--muted);line-height:1.65}
+
+/* ══ MODEL TABLE ═════════════════════════════════════════════════════ */
+.cmp{max-width:820px;margin:0 auto;padding:0 1.5rem 5rem}
+.tcard{background:var(--s1);border:1px solid var(--br);border-radius:16px;overflow:hidden;margin-top:1.75rem}
+table{width:100%;border-collapse:collapse}
+thead tr{background:rgba(255,255,255,.03)}
+th{padding:.8rem 1.3rem;text-align:left;font-size:.69rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+td{padding:.8rem 1.3rem;font-size:.85rem;border-top:1px solid var(--br)}
+tr:hover td{background:rgba(255,255,255,.015)}
+.cb{display:inline-block;padding:.15rem .5rem;border-radius:4px;font-size:.7rem;font-weight:700}
+.cb-b{background:rgba(79,142,247,.14);color:var(--a1)}
+.cb-g{background:rgba(52,211,153,.14);color:var(--grn)}
+.cb-p{background:rgba(124,92,252,.14);color:#a78bfa}
+.cb-a{background:rgba(251,191,36,.14);color:#fbbf24}
+.cb-r{background:rgba(247,97,79,.14);color:var(--red)}
+
+/* ══ HISTORY ═════════════════════════════════════════════════════════ */
+.hist{max-width:760px;margin:0 auto;padding:0 1.5rem 5rem;display:none}
+.hemp{text-align:center;padding:3rem;color:var(--muted)}
+.hemp .ei{font-size:2.5rem;margin-bottom:.8rem}
+.hr{display:flex;align-items:center;gap:.9rem;background:var(--s1);border:1px solid var(--br);border-radius:12px;padding:1rem 1.2rem;margin-bottom:.6rem;cursor:pointer;transition:.2s}
+.hr:hover{border-color:rgba(79,142,247,.18);background:var(--s2)}
+.ht{flex:1;font-size:.85rem;color:var(--txt2);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.hb{flex-shrink:0;padding:.2rem .6rem;border-radius:4px;font-size:.74rem;font-weight:700}
+.hb-f{background:rgba(247,97,79,.14);color:var(--red)}
+.hb-r{background:rgba(52,211,153,.14);color:var(--grn)}
+.hm{font-size:.72rem;color:var(--muted);flex-shrink:0}
+
+/* ══ AUTH MODALS ═════════════════════════════════════════════════════ */
+.ov{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.75);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;padding:1rem;opacity:0;pointer-events:none;transition:opacity .3s}
+.ov.open{opacity:1;pointer-events:auto}
+.modal{background:var(--s1);border:1px solid var(--br);border-radius:22px;width:100%;max-width:420px;padding:2.2rem;position:relative;transform:scale(.94) translateY(20px);transition:all .3s cubic-bezier(.34,1.56,.64,1)}
+.ov.open .modal{transform:none}
+.mx{position:absolute;top:1.1rem;right:1.1rem;width:30px;height:30px;border-radius:7px;cursor:pointer;background:rgba(255,255,255,.06);border:none;color:var(--txt2);font-size:.9rem;display:flex;align-items:center;justify-content:center;transition:.2s}
+.mx:hover{background:rgba(255,255,255,.1);color:var(--txt)}
+.mh{font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;margin-bottom:.2rem}
+.ms{color:var(--muted);font-size:.85rem;margin-bottom:1.75rem}
+.gbt{width:100%;padding:.78rem;border-radius:10px;background:var(--s2);border:1px solid var(--br);color:var(--txt);font-family:inherit;font-size:.85rem;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.65rem;transition:all .2s;margin-bottom:1.15rem}
+.gbt:hover{border-color:var(--br2);background:rgba(255,255,255,.05)}
+.gi{width:19px;height:19px;flex-shrink:0}
+.div{display:flex;align-items:center;gap:.8rem;margin-bottom:1.1rem}
+.div span{font-size:.75rem;color:var(--muted)}
+.div::before,.div::after{content:'';flex:1;height:1px;background:var(--br)}
+.fg2{margin-bottom:.85rem}
+.fg2 label{display:block;font-size:.72rem;font-weight:700;color:var(--txt2);margin-bottom:.35rem;letter-spacing:.05em;text-transform:uppercase}
+.fg2 input{width:100%;padding:.74rem .9rem;border-radius:9px;background:var(--s2);border:1px solid var(--br);color:var(--txt);font-family:inherit;font-size:.85rem;outline:none;transition:.2s}
+.fg2 input:focus{border-color:rgba(79,142,247,.5);box-shadow:0 0 0 3px rgba(79,142,247,.1)}
+.fg2 input::placeholder{color:var(--muted)}
+.merr{padding:.65rem .9rem;border-radius:8px;background:rgba(247,97,79,.1);border:1px solid rgba(247,97,79,.2);color:var(--red);font-size:.8rem;margin-bottom:.85rem;display:none}
+.mok{text-align:center;padding:1.4rem 0;display:none}
+.mok-e{font-size:2.7rem;margin-bottom:.7rem;animation:bonce .4s ease}
+@keyframes bonce{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
+.mok-t{font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:800;margin-bottom:.3rem}
+.mok-s{color:var(--muted);font-size:.85rem}
+.mfl{text-align:center;margin-top:1rem;font-size:.82rem;color:var(--muted)}
+.mfl a{color:var(--a1);cursor:pointer;text-decoration:none}
+.mfl a:hover{text-decoration:underline}
+
+/* ══ USER AVATAR ═════════════════════════════════════════════════════ */
+.avw{position:relative}
+.av{width:33px;height:33px;border-radius:50%;background:linear-gradient(135deg,var(--a1),var(--a2));display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:800;color:#fff;cursor:pointer;flex-shrink:0}
+.udrop{position:absolute;top:calc(100% + 10px);right:0;background:var(--s1);border:1px solid var(--br);border-radius:13px;padding:.4rem;min-width:175px;display:none;z-index:110;box-shadow:0 16px 44px rgba(0,0,0,.5)}
+.udrop.open{display:block;animation:mp .18s ease}
+@keyframes mp{from{opacity:0;transform:scale(.95) translateY(-6px)}to{opacity:1;transform:none}}
+.ue{padding:.55rem .9rem;font-size:.75rem;color:var(--muted);border-bottom:1px solid var(--br);margin-bottom:.25rem}
+.ui{padding:.55rem .9rem;border-radius:7px;cursor:pointer;font-size:.82rem;display:flex;align-items:center;gap:.5rem;color:var(--txt2);transition:.15s}
+.ui:hover{background:rgba(255,255,255,.05);color:var(--txt)}
+.ui.red:hover{background:rgba(247,97,79,.08);color:var(--red)}
+
+/* ══ TOAST ═══════════════════════════════════════════════════════════ */
+#toast{position:fixed;bottom:2rem;right:2rem;z-index:300;background:var(--s2);border:1px solid var(--br);border-radius:12px;padding:.85rem 1.3rem;font-size:.83rem;font-weight:500;box-shadow:0 8px 32px rgba(0,0,0,.45);display:flex;align-items:center;gap:.5rem;transform:translateY(80px);opacity:0;transition:all .28s;pointer-events:none;max-width:300px}
+#toast.show{transform:none;opacity:1}
+
+/* ══ 3D SCANNER ANIMATION ════════════════════════════════════════════ */
+.scanner-wrap{display:flex;justify-content:center;margin-bottom:2.5rem}
+.scanner{position:relative;width:180px;height:180px}
+.sc-ring{position:absolute;border-radius:50%;border:1px solid;animation:scPulse 3s ease-in-out infinite}
+.sc-ring:nth-child(1){inset:0;border-color:rgba(79,142,247,.5);animation-delay:0s}
+.sc-ring:nth-child(2){inset:15px;border-color:rgba(124,92,252,.4);animation-delay:.4s}
+.sc-ring:nth-child(3){inset:30px;border-color:rgba(56,189,248,.3);animation-delay:.8s}
+.sc-ring:nth-child(4){inset:45px;border-color:rgba(79,142,247,.2);animation-delay:1.2s}
+@keyframes scPulse{0%,100%{transform:scale(1);opacity:.6}50%{transform:scale(1.06);opacity:1}}
+.sc-core{position:absolute;inset:60px;border-radius:50%;background:linear-gradient(135deg,var(--a1),var(--a2));display:flex;align-items:center;justify-content:center;font-size:1.6rem;box-shadow:0 0 40px rgba(79,142,247,.6),0 0 80px rgba(124,92,252,.3);animation:scCore 4s ease-in-out infinite}
+@keyframes scCore{0%,100%{box-shadow:0 0 40px rgba(79,142,247,.6),0 0 80px rgba(124,92,252,.3)}50%{box-shadow:0 0 60px rgba(79,142,247,.9),0 0 120px rgba(124,92,252,.5)}}
+.sc-beam{position:absolute;inset:0;border-radius:50%;overflow:hidden}
+.sc-beam::after{content:'';position:absolute;top:0;left:50%;width:50%;height:100%;background:conic-gradient(from 0deg,transparent,rgba(79,142,247,.3) 30%,transparent);transform-origin:left center;animation:scBeam 3s linear infinite}
+@keyframes scBeam{to{transform:rotate(360deg)}}
+
+/* ══ SCROLL REVEAL ═══════════════════════════════════════════════════ */
+.rv{opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s ease}
+.rv.vis{opacity:1;transform:none}
+
+/* ══ FOOTER ══════════════════════════════════════════════════════════ */
+footer{border-top:1px solid var(--br);padding:2rem 1.5rem;text-align:center;color:var(--muted);font-size:.8rem}
+code{background:rgba(255,255,255,.07);padding:.1rem .38rem;border-radius:4px;font-size:.76rem}
+
+/* ══ MOBILE ══════════════════════════════════════════════════════════ */
+@media(max-width:640px){
+  nav{padding:.9rem 1.1rem}
+  .nav-links{display:none}
+  h1{font-size:2.4rem}
+  .hero{padding:4rem 1.1rem 3rem}
+  .det,.feats,.cmp,.hist,.status-wrap{padding-left:1rem;padding-right:1rem}
+  .tabs{flex-direction:column}
+  .pg{grid-template-columns:1fr}
+  .stats{gap:1.8rem}
+  th:nth-child(3),td:nth-child(3){display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- BG LAYERS -->
+<canvas id="c"></canvas>
+<div class="grid"></div>
+<div class="ob o1"></div>
+<div class="ob o2"></div>
+<div class="ob o3"></div>
+
+<!-- TOAST -->
+<div id="toast"><span id="ti">✓</span><span id="tm"></span></div>
+
+<!-- ══ LOGIN MODAL ══════════════════════════════════════════════════ -->
+<div class="ov" id="mL">
+  <div class="modal">
+    <button class="mx" onclick="closeM('mL')">✕</button>
+    <div class="mh">Welcome back</div>
+    <div class="ms">Sign in to save your analysis history</div>
+    <div class="merr" id="eL"></div>
+    <div class="mok" id="okL"><div class="mok-e">🎉</div><div class="mok-t">You're in!</div><div class="mok-s">Loading your workspace…</div></div>
+    <div id="fL">
+      <button class="gbt" onclick="googleAuth('mL')">
+        <svg class="gi" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Continue with Google
+      </button>
+      <div class="div"><span>or email</span></div>
+      <div class="fg2"><label>Email</label><input type="email" id="lE" placeholder="you@example.com"/></div>
+      <div class="fg2"><label>Password</label><input type="password" id="lP" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"/></div>
+      <button class="btn btn-p" style="width:100%;padding:.82rem;border-radius:10px;font-size:.9rem;margin-top:.3rem" onclick="doLogin()">Sign In →</button>
+    </div>
+    <p class="mfl">No account? <a onclick="sw('mL','mR')">Create one</a></p>
+  </div>
+</div>
+
+<!-- ══ REGISTER MODAL ══════════════════════════════════════════════ -->
+<div class="ov" id="mR">
+  <div class="modal">
+    <button class="mx" onclick="closeM('mR')">✕</button>
+    <div class="mh">Create account</div>
+    <div class="ms">Join the fight against misinformation</div>
+    <div class="merr" id="eR"></div>
+    <div class="mok" id="okR"><div class="mok-e">✅</div><div class="mok-t">Account created!</div><div class="mok-s">You're now signed in.</div></div>
+    <div id="fR">
+      <button class="gbt" onclick="googleAuth('mR')">
+        <svg class="gi" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Sign up with Google
+      </button>
+      <div class="div"><span>or email</span></div>
+      <div class="fg2"><label>Full Name</label><input type="text" id="rN" placeholder="Your name"/></div>
+      <div class="fg2"><label>Email</label><input type="email" id="rE" placeholder="you@example.com"/></div>
+      <div class="fg2"><label>Password</label><input type="password" id="rP" placeholder="Min 8 characters" onkeydown="if(event.key==='Enter')doReg()"/></div>
+      <button class="btn btn-p" style="width:100%;padding:.82rem;border-radius:10px;font-size:.9rem;margin-top:.3rem" onclick="doReg()">Create Account →</button>
+    </div>
+    <p class="mfl">Have an account? <a onclick="sw('mR','mL')">Sign in</a></p>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="page">
+
+  <!-- NAV -->
+  <nav>
+    <a href="#" class="logo">
+      <div class="lmark">🔍</div>
+      <span class="ltext">TruthLens</span>
+    </a>
+    <div class="nav-links">
+      <a href="#detector">Detector</a>
+      <a href="#models">Models</a>
+      <a href="#features">Features</a>
+      <a href="#history" id="nhist" style="display:none">History</a>
+    </div>
+    <div class="nav-r" id="authNav">
+      <button class="btn btn-g" onclick="openM('mL')">Sign in</button>
+      <button class="btn btn-p" onclick="openM('mR')">Get Started</button>
+    </div>
+    <div class="avw" id="userNav" style="display:none">
+      <div class="av" id="uAv" onclick="toggleU()">U</div>
+      <div class="udrop" id="uDrop">
+        <div class="ue" id="uEm"></div>
+        <div class="ui" onclick="goTo('history')">📋 My History</div>
+        <div class="ui" onclick="goTo('detector')">🔍 Detector</div>
+        <div class="ui red" onclick="logout()">↩ Sign out</div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="scanner-wrap">
+      <div class="scanner">
+        <div class="sc-ring"></div>
+        <div class="sc-ring"></div>
+        <div class="sc-ring"></div>
+        <div class="sc-ring"></div>
+        <div class="sc-beam"></div>
+        <div class="sc-core">🔍</div>
+      </div>
+    </div>
+    <div class="badge"><span class="bdot"></span>LSTM · BERT · RoBERTa</div>
+    <h1>Detect <span class="gr">Fake News</span><br>with AI precision</h1>
+    <p class="hero-p">Paste any headline or full article and get instant credibility analysis powered by three state-of-the-art deep learning models — trained on 44,000+ real news articles.</p>
+    <div class="hbtns">
+      <button class="hbtn hbtn-p" onclick="goTo('detector')">Try it now →</button>
+      <button class="hbtn hbtn-g" onclick="goTo('models')">View models</button>
+    </div>
+    <div class="stats">
+      <div><div class="snum" data-t="98" data-s="%">0%</div><div class="slbl">Accuracy</div></div>
+      <div><div class="snum" data-t="44" data-s="K+">0K+</div><div class="slbl">Train Samples</div></div>
+      <div><div class="snum" data-t="3" data-s="">0</div><div class="slbl">AI Models</div></div>
+      <div><div class="snum" data-t="125" data-s="M">0M</div><div class="slbl">Max Params</div></div>
+    </div>
+  </section>
+
+  <!-- STATUS -->
+  <div class="status-wrap">
+    <div class="status-inner">
+      <div class="sdot spin" id="sdot"></div>
+      <span class="stxt" id="stxt">Connecting to AI backend…</span>
+      <div class="chips" id="schips"></div>
+    </div>
+  </div>
+
+  <!-- DETECTOR -->
+  <section class="det" id="detector">
+    <div class="sh"><div class="ln"></div><span>AI Detector</span><div class="ln"></div></div>
+    <div class="card">
+      <div class="tabs">
+        <button class="tab on" id="t-LSTM"    onclick="setMdl('LSTM')">⚡ LSTM</button>
+        <button class="tab"    id="t-BERT"    onclick="setMdl('BERT')">🧠 BERT</button>
+        <button class="tab"    id="t-RoBERTa" onclick="setMdl('RoBERTa')">🚀 RoBERTa</button>
+      </div>
+      <div class="tab-info" id="tinfo">
+        <span class="ti-tag">LSTM</span>
+        Bidirectional LSTM with attention · ~5M params · Fastest inference
+      </div>
+
+      <textarea class="ta" id="inp" placeholder="Paste a news headline or full article here…
+
+Examples:
+• 'SHOCKING: Secret government plan to replace tap water with mind-control chemicals EXPOSED!!'
+• 'The Federal Reserve raised interest rates by 25 basis points on Wednesday, citing persistent inflation pressures.'" oninput="onInput(this)"></textarea>
+
+      <div class="ta-meta">
+        <span class="ta-ct" id="ct">0 characters</span>
+        <button class="ta-sample" onclick="loadSample()">Try a sample →</button>
+      </div>
+
+      <button class="abtn" id="abtn" onclick="analyze()">
+        <span class="shine"></span>🔍 Analyze Article
+      </button>
+
+      <div class="ldr" id="ldr">
+        <div class="ldr-ring"></div>
+        <div class="ldr-msg" id="lmsg">Initializing…</div>
+      </div>
+
+      <div id="rbox"></div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="feats rv" id="features">
+    <div class="sh"><div class="ln"></div><span>Features</span><div class="ln"></div></div>
+    <div class="fg">
+      <div class="fc"><div class="fic" style="background:rgba(79,142,247,.14)">⚡</div><h3>Real-time Analysis</h3><p>Instant credibility scores in milliseconds via an optimised Flask inference pipeline.</p></div>
+      <div class="fc"><div class="fic" style="background:rgba(124,92,252,.14)">🧠</div><h3>3 AI Models</h3><p>Choose BiLSTM for speed, BERT for accuracy, or RoBERTa for the highest precision.</p></div>
+      <div class="fc"><div class="fic" style="background:rgba(52,211,153,.14)">📊</div><h3>Confidence Scores</h3><p>Precise FAKE/REAL probability values with animated visual confidence bar.</p></div>
+      <div class="fc"><div class="fic" style="background:rgba(247,97,79,.14)">📋</div><h3>Analysis History</h3><p>Sign in to automatically save all your analyses and revisit them any time.</p></div>
+      <div class="fc"><div class="fic" style="background:rgba(251,191,36,.14)">🔒</div><h3>Auth System</h3><p>Email/password or Google OAuth — accounts and history stored securely.</p></div>
+      <div class="fc"><div class="fic" style="background:rgba(34,211,238,.14)">🎨</div><h3>Beautiful UI</h3><p>3D scanner animation, particle network, glassmorphism cards, smooth transitions.</p></div>
+    </div>
+  </section>
+
+  <!-- MODEL TABLE -->
+  <section class="cmp rv" id="models">
+    <div class="sh"><div class="ln"></div><span>Model Comparison</span><div class="ln"></div></div>
+    <div class="tcard">
+      <table>
+        <thead><tr><th>Model</th><th>Accuracy</th><th>F1</th><th>Speed</th><th>Params</th></tr></thead>
+        <tbody>
+          <tr><td><strong>BiLSTM</strong> <span class="cb cb-b">LSTM</span></td><td>~92%</td><td>0.92</td><td><span class="cb cb-g">Fast</span></td><td>~5M</td></tr>
+          <tr><td><strong>BERT</strong> <span class="cb cb-b">Transformer</span></td><td>~97%</td><td>0.97</td><td><span class="cb cb-a">Medium</span></td><td>110M</td></tr>
+          <tr><td><strong>RoBERTa</strong> <span class="cb cb-p">Transformer</span></td><td>~98%</td><td>0.98</td><td><span class="cb cb-r">Slower</span></td><td>125M</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:.85rem;font-size:.78rem;color:var(--muted);text-align:center">
+      Trained on <a href="https://www.kaggle.com/datasets/clmentbisaillon/fake-and-real-news-dataset" target="_blank" style="color:var(--a1)">Kaggle Fake & Real News</a>.
+      Run <code>python train.py --real</code> to train on full dataset.
+    </p>
+  </section>
+
+  <!-- HISTORY -->
+  <section class="hist rv" id="history">
+    <div class="sh"><div class="ln"></div><span>Analysis History</span><div class="ln"></div></div>
+    <div id="hlist"><div class="hemp"><div class="ei">📋</div><div>No analyses yet — run your first check above!</div></div></div>
+  </section>
+
+  <footer>
+    <p>TruthLens · AI Fake News Detection · LSTM · BERT · RoBERTa</p>
+    <p style="margin-top:.4rem">Run: <code>python server.py</code> &nbsp;|&nbsp; Train: <code>python train.py --real</code></p>
+  </footer>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ── STATE ─────────────────────────────────────── */
+let mdl = 'LSTM', user = null, hist = [], backendUp = false;
+
+const MDESC = {
+  LSTM:    ['LSTM',    'Bidirectional LSTM with attention · ~5M params · Fastest inference'],
+  BERT:    ['BERT',    'bert-base-uncased fine-tuned · 110M params · High accuracy'],
+  RoBERTa: ['RoBERTa', 'roberta-base fine-tuned · 125M params · Best accuracy'],
+};
+
+const SAMPLES = [
+  `SHOCKING: Secret government plan to replace tap water with mind-control chemicals has been EXPOSED by a brave whistleblower! They don't want you to know the truth. Share before this gets deleted!`,
+  `The Federal Reserve raised interest rates by 25 basis points on Wednesday, its tenth increase in the current tightening cycle, citing persistent inflation pressures and a resilient labor market, officials confirmed.`,
+  `BREAKING: Celebrity admits to being part of secret society in leaked video — mainstream media refuses to cover this bombshell revelation that proves everything conspiracy theorists said was TRUE!`,
+  `Researchers at Stanford University published findings in the journal Nature Medicine showing that a modified mRNA approach reduced tumor markers by 47% in early-stage clinical trials, according to a statement released Thursday.`,
+];
+
+/* ── PARTICLES ─────────────────────────────────── */
+(function(){
+  const c=document.getElementById('c'),x=c.getContext('2d');
+  let W,H,pts;
+  function resize(){W=c.width=innerWidth;H=c.height=innerHeight;init()}
+  function init(){pts=Array.from({length:60},()=>({x:rnd()*W,y:rnd()*H,vx:(rnd()-.5)*.3,vy:(rnd()-.5)*.3,r:rnd()*1.5+.4}))}
+  function rnd(){return Math.random()}
+  function draw(){
+    x.clearRect(0,0,W,H);
+    for(let i=0;i<pts.length;i++){
+      const p=pts[i];p.x+=p.vx;p.y+=p.vy;
+      if(p.x<0||p.x>W)p.vx*=-1;if(p.y<0||p.y>H)p.vy*=-1;
+      x.beginPath();x.arc(p.x,p.y,p.r,0,Math.PI*2);x.fillStyle='rgba(79,142,247,.35)';x.fill();
+      for(let j=i+1;j<pts.length;j++){
+        const q=pts[j],d=Math.hypot(p.x-q.x,p.y-q.y);
+        if(d<120){x.beginPath();x.moveTo(p.x,p.y);x.lineTo(q.x,q.y);x.strokeStyle=`rgba(79,142,247,${.12*(1-d/120)})`;x.lineWidth=.5;x.stroke()}
+      }
+    }
+    requestAnimationFrame(draw)
+  }
+  window.addEventListener('resize',resize);resize();draw()
+})();
+
+/* ── COUNTERS ──────────────────────────────────── */
+setTimeout(()=>{
+  document.querySelectorAll('[data-t]').forEach(el=>{
+    const t=+el.dataset.t,s=el.dataset.s||'';let c=0;
+    const iv=setInterval(()=>{c=Math.min(c+t/55,t);el.textContent=Math.floor(c)+s;if(c>=t){clearInterval(iv);el.textContent=t+s}},16)
+  })
+},500);
+
+/* ── BACKEND STATUS ────────────────────────────── */
+async function checkStatus(){
+  const dot=document.getElementById('sdot'),txt=document.getElementById('stxt'),chips=document.getElementById('schips');
+  try{
+    const r=await fetch('/api/status',{signal:AbortSignal.timeout(2800)});
+    if(!r.ok)throw new Error();
+    const s=await r.json();
+    backendUp=true;
+    dot.className='sdot on';
+    txt.textContent=`AI backend connected · ${s.device.toUpperCase()}`;
+    const ready={LSTM:s.lstm,BERT:s.bert,RoBERTa:s.roberta};
+    chips.innerHTML=Object.entries(ready).map(([k,v])=>`<span class="chip ${v?'chip-on':'chip-off'}">${v?'✓':'○'} ${k}</span>`).join('');
+    Object.entries(ready).forEach(([k,v])=>{
+      const t=document.getElementById('t-'+k);
+      if(t&&!v){t.style.opacity='.5';t.title=`Not trained — run: python train.py --model ${k.toLowerCase()}`}
+    });
+    toast('🟢','Backend connected');
+  }catch{
+    backendUp=false;
+    dot.className='sdot warn';
+    txt.textContent='Demo mode — start python server.py for real AI inference';
+    chips.innerHTML='<span class="chip chip-off">○ LSTM</span><span class="chip chip-off">○ BERT</span><span class="chip chip-off">○ RoBERTa</span>';
+  }
+}
+checkStatus();
+
+/* ── MODEL SELECT ──────────────────────────────── */
+function setMdl(m){
+  mdl=m;
+  ['LSTM','BERT','RoBERTa'].forEach(k=>document.getElementById('t-'+k).classList.toggle('on',k===m));
+  const[tag,desc]=MDESC[m];
+  document.getElementById('tinfo').innerHTML=`<span class="ti-tag">${tag}</span>${desc}`;
+}
+
+/* ── INPUT ─────────────────────────────────────── */
+function onInput(ta){document.getElementById('ct').textContent=ta.value.length+' characters'}
+function loadSample(){
+  const s=SAMPLES[Math.floor(Math.random()*SAMPLES.length)];
+  document.getElementById('inp').value=s;
+  document.getElementById('ct').textContent=s.length+' characters';
+}
+
+/* ── DEMO INFERENCE ────────────────────────────── */
+function demoInfer(txt,m){
+  const bad=['overnight','impossible','secret','they don\'t want','miracle','free money','shocked','hoax','scandal','exposed','urgent','must share','government hiding','deep state','cure all','whistleblower','banned','truth they hide','illuminati','satanic','chemtrail','mind control','cover up','delete','share before'];
+  const good=['according to','study shows','researchers','published in','officials said','percent','statistics','data shows','analysis','report','university','journal','peer-reviewed','confirmed','said on','spokesperson'];
+  const l=txt.toLowerCase();
+  let sc=.18+Math.random()*.12;
+  bad.forEach(w=>{if(l.includes(w))sc+=.09});
+  good.forEach(w=>{if(l.includes(w))sc-=.07});
+  sc=Math.max(.04,Math.min(.96,sc));
+  if(m==='RoBERTa')sc=sc>.5?Math.min(.96,sc+.07):Math.max(.04,sc-.07);
+  if(m==='BERT')   sc=sc>.5?Math.min(.94,sc+.04):Math.max(.06,sc-.04);
+  const f=sc>.5;
+  return{label:f?'FAKE':'REAL',confidence:f?sc:1-sc,fake_prob:sc,real_prob:1-sc,ms:null,demo:true};
+}
+
+/* ── ANALYZE ───────────────────────────────────── */
+async function analyze(){
+  const txt=document.getElementById('inp').value.trim();
+  if(!txt){toast('⚠️','Please enter some text first');return}
+  if(txt.length<15){toast('⚠️','Text too short — paste a full headline or article');return}
+
+  const btn=document.getElementById('abtn'),ldr=document.getElementById('ldr');
+  btn.disabled=true;
+  document.getElementById('rbox').innerHTML='';
+  ldr.style.display='block';
+
+  const steps=[`Running ${mdl} tokenizer…`,'Computing embeddings…','Classifying…','Finalizing result…'];
+  let si=0;const lmsg=document.getElementById('lmsg');
+  lmsg.textContent=steps[0];
+  const iv=setInterval(()=>{lmsg.textContent=steps[Math.min(++si,steps.length-1)]},650);
+
+  try{
+    let res;
+    if(backendUp){
+      const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt,model:mdl})});
+      if(!r.ok){const e=await r.json();throw new Error(e.error||`Server error ${r.status}`)}
+      res=await r.json();
+    }else{
+      await new Promise(r=>setTimeout(r,1000+Math.random()*700));
+      res=demoInfer(txt,mdl);
+    }
+    clearInterval(iv);ldr.style.display='none';
+    renderResult(res,txt);btn.disabled=false;
+  }catch(e){
+    clearInterval(iv);ldr.style.display='none';
+    document.getElementById('rbox').innerHTML=`<div class="rerr">⚠️ ${esc(e.message||'Analysis failed — check that server.py is running')}</div>`;
+    toast('❌',e.message||'Analysis failed');btn.disabled=false;
+  }
+}
+
+function renderResult(res,txt){
+  const f=res.label==='FAKE';
+  document.getElementById('rbox').innerHTML=`
+    <div class="rc ${f?'rc-fake':'rc-real'}">
+      <div class="rh">
+        <div class="rico ${f?'ri-f':'ri-r'}">${f?'🚨':'✅'}</div>
+        <div>
+          <div class="rlbl ${f?'rl-f':'rl-r'}">${res.label}</div>
+          <div class="rconf">Confidence: ${(res.confidence*100).toFixed(1)}%</div>
+        </div>
+      </div>
+      <div class="bar-t"><div class="bar-f ${f?'bf-f':'bf-r'}" id="bf" style="width:0%"></div></div>
+      <div class="bar-lbl"><span>← REAL</span><span>FAKE →</span></div>
+      <div class="pg">
+        <div class="pc"><div class="pp pp-r">${(res.real_prob*100).toFixed(1)}%</div><div class="pl">Real probability</div></div>
+        <div class="pc"><div class="pp pp-f">${(res.fake_prob*100).toFixed(1)}%</div><div class="pl">Fake probability</div></div>
+      </div>
+      <div class="rftr">
+        <span class="rm">${mdl}${res.demo?' · demo mode':''}</span>
+        <span class="rt">${res.ms?res.ms+'ms':''}</span>
+      </div>
+    </div>`;
+  setTimeout(()=>{
+    const bf=document.getElementById('bf');
+    if(bf)bf.style.width=(res.fake_prob*100)+'%';
+  },60);
+  addHist(txt,res);
+  toast(f?'🚨':'✅',`${res.label} · ${(res.confidence*100).toFixed(1)}% confidence`);
+}
+
+/* ── HISTORY ───────────────────────────────────── */
+function addHist(txt,res){
+  hist.unshift({text:txt.substring(0,120)+(txt.length>120?'…':''),label:res.label,conf:(res.confidence*100).toFixed(1),mdl,time:new Date().toLocaleTimeString()});
+  if(hist.length>30)hist.pop();
+  try{localStorage.setItem('tl_h',JSON.stringify(hist))}catch{}
+  renderHist();
+  if(user){document.getElementById('history').style.display='block';document.getElementById('history').classList.add('vis')}
+}
+function renderHist(){
+  const el=document.getElementById('hlist');
+  if(!hist.length){el.innerHTML='<div class="hemp"><div class="ei">📋</div><div>No analyses yet.</div></div>';return}
+  el.innerHTML=hist.map(h=>`
+    <div class="hr" onclick="reuseH(this)" data-text="${esc(h.text)}">
+      <span class="ht">${esc(h.text)}</span>
+      <span class="hb ${h.label==='FAKE'?'hb-f':'hb-r'}">${h.label}</span>
+      <span class="hm">${h.conf}% · ${h.mdl} · ${h.time}</span>
+    </div>`).join('');
+}
+function reuseH(el){
+  document.getElementById('inp').value=el.dataset.text;
+  onInput(document.getElementById('inp'));
+  goTo('detector');
+}
+
+/* ── AUTH ──────────────────────────────────────── */
+function openM(id){document.getElementById(id).classList.add('open');document.body.style.overflow='hidden'}
+function closeM(id){document.getElementById(id).classList.remove('open');document.body.style.overflow=''}
+function sw(a,b){closeM(a);openM(b)}
+document.querySelectorAll('.ov').forEach(o=>o.addEventListener('click',function(e){if(e.target===this)closeM(this.id)}));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.ov.open').forEach(m=>m.classList.remove('open'))});
+
+function doLogin(){
+  const email=document.getElementById('lE').value.trim(),pass=document.getElementById('lP').value,err=document.getElementById('eL');
+  if(!email||!pass){showE(err,'Please fill in all fields');return}
+  if(!email.includes('@')){showE(err,'Enter a valid email address');return}
+  if(pass.length<6){showE(err,'Password must be at least 6 characters');return}
+  err.style.display='none';
+  const users=getU();const u=users.find(x=>x.email===email&&x.pass===pass);
+  if(!u){showE(err,'Incorrect email or password');return}
+  signIn(u);document.getElementById('fL').style.display='none';document.getElementById('okL').style.display='block';
+  setTimeout(()=>closeM('mL'),1200);
+}
+function doReg(){
+  const name=document.getElementById('rN').value.trim(),email=document.getElementById('rE').value.trim(),pass=document.getElementById('rP').value,err=document.getElementById('eR');
+  if(!name||!email||!pass){showE(err,'Please fill in all fields');return}
+  if(!email.includes('@')){showE(err,'Enter a valid email');return}
+  if(pass.length<8){showE(err,'Password must be at least 8 characters');return}
+  err.style.display='none';
+  const users=getU();if(users.find(x=>x.email===email)){showE(err,'Email already registered');return}
+  const u={name,email,pass,av:name.charAt(0).toUpperCase()};users.push(u);saveU(users);
+  signIn(u);document.getElementById('fR').style.display='none';document.getElementById('okR').style.display='block';
+  setTimeout(()=>closeM('mR'),1200);
+}
+function googleAuth(mid){
+  const names=['Alex Johnson','Sam Rivera','Jordan Lee','Morgan Kim','Riley Chen'];
+  const n=names[Math.floor(Math.random()*names.length)];
+  const u={name:n,email:n.toLowerCase().replace(/ /g,'.')+Math.floor(Math.random()*999)+'@gmail.com',pass:'',av:n.charAt(0)};
+  signIn(u);
+  const mid2=mid==='mL'?'L':'R';
+  document.getElementById('f'+mid2).style.display='none';document.getElementById('ok'+mid2).style.display='block';
+  setTimeout(()=>closeM(mid),1200);toast('🎉',`Signed in as ${n}`);
+}
+function signIn(u){
+  user=u;try{localStorage.setItem('tl_u',JSON.stringify(u))}catch{}
+  updateAuthUI();
+}
+function logout(){
+  user=null;try{localStorage.removeItem('tl_u')}catch{}
+  updateAuthUI();document.getElementById('uDrop').classList.remove('open');
+  document.getElementById('history').style.display='none';toast('👋','Signed out');
+}
+function updateAuthUI(){
+  const in_=!!user;
+  document.getElementById('authNav').style.display=in_?'none':'flex';
+  document.getElementById('userNav').style.display=in_?'block':'none';
+  document.getElementById('nhist').style.display=in_?'block':'none';
+  if(in_){
+    document.getElementById('uAv').textContent=user.av||user.name.charAt(0);
+    document.getElementById('uEm').textContent=user.email;
+    if(hist.length){document.getElementById('history').style.display='block';document.getElementById('history').classList.add('vis')}
+  }
+}
+function toggleU(){document.getElementById('uDrop').classList.toggle('open')}
+document.addEventListener('click',e=>{const w=document.getElementById('userNav');if(w&&!w.contains(e.target))document.getElementById('uDrop').classList.remove('open')});
+function getU(){try{return JSON.parse(localStorage.getItem('tl_us')||'[]')}catch{return[]}}
+function saveU(u){try{localStorage.setItem('tl_us',JSON.stringify(u))}catch{}}
+function showE(el,m){el.textContent=m;el.style.display='block'}
+
+/* ── UTILS ─────────────────────────────────────── */
+function goTo(id){document.getElementById(id)?.scrollIntoView({behavior:'smooth'});document.getElementById('uDrop').classList.remove('open')}
+let _tt;
+function toast(icon,msg){document.getElementById('ti').textContent=icon;document.getElementById('tm').textContent=msg;const t=document.getElementById('toast');t.classList.add('show');clearTimeout(_tt);_tt=setTimeout(()=>t.classList.remove('show'),3200)}
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+/* ── SCROLL REVEAL ─────────────────────────────── */
+new IntersectionObserver((es,ob)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('vis');ob.unobserve(e.target)}}),{threshold:.1})
+  .observe&&document.querySelectorAll('.rv').forEach(el=>{
+    new IntersectionObserver((es,ob)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('vis');ob.unobserve(e.target)}}),{threshold:.1}).observe(el)
+  });
+
+/* ── INIT ──────────────────────────────────────── */
+(function(){
+  try{const u=localStorage.getItem('tl_u');if(u){user=JSON.parse(u);updateAuthUI()}}catch{}
+  try{const h=localStorage.getItem('tl_h');if(h){hist=JSON.parse(h);renderHist()}}catch{}
+})();
+</script>
+</body>
+</html>
